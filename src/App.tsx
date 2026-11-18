@@ -27,6 +27,7 @@ import {
   IconUpload,
   IconShieldCheck,
   IconChartLine,
+  IconSparkles,
 } from '@tabler/icons-react';
 import { StatementMetadata, Transaction } from './types/transaction';
 import { ParseResult } from './utils/parser';
@@ -41,6 +42,7 @@ import { Budget503020 } from './components/Analytics/Budget503020';
 import { Behavioral } from './components/Analytics/Behavioral';
 import { HealthScoreCard } from './components/Analytics/HealthScoreCard';
 import { MonthlyAndTrends } from './components/Analytics/MonthlyAndTrends';
+import { AdvancedIntelligence } from './components/Analytics/AdvancedIntelligence';
 
 export const App: React.FC = () => {
   const { setColorScheme } = useMantineColorScheme();
@@ -217,6 +219,13 @@ export const App: React.FC = () => {
                   </Tabs.Tab>
 
                   <Tabs.Tab
+                    value="intelligence"
+                    leftSection={<IconSparkles size={16} color="var(--mantine-color-teal-6)" />}
+                  >
+                    Intelligence & Runway
+                  </Tabs.Tab>
+
+                  <Tabs.Tab
                     value="leaks"
                     leftSection={<IconHeartRateMonitor size={16} color="var(--mantine-color-grape-6)" />}
                   >
@@ -269,7 +278,19 @@ export const App: React.FC = () => {
                   />
                 </Tabs.Panel>
 
-                {/* Tab 5: Leaks & Fees Auditor */}
+                {/* Tab 5: Advanced Intelligence & Cash Runway */}
+                <Tabs.Panel value="intelligence">
+                  <AdvancedIntelligence
+                    recurringBills={metrics.recurringBills}
+                    socialContacts={metrics.socialContacts}
+                    timeOfDayInsights={metrics.timeOfDayInsights}
+                    statutoryRecords={metrics.statutoryRecords}
+                    runwayInsight={metrics.runwayInsight}
+                    totalOut={metrics.totalOut}
+                  />
+                </Tabs.Panel>
+
+                {/* Tab 6: Leaks & Fees Auditor */}
                 <Tabs.Panel value="leaks">
                   <LeaksAuditor metrics={metrics} />
                 </Tabs.Panel>

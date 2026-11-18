@@ -1,4 +1,14 @@
-import { DayInsight, FinancialHealthMetrics, MonthlyMetric, Transaction } from '../types/transaction';
+import {
+  DayInsight,
+  FinancialHealthMetrics,
+  MonthlyMetric,
+  RecurringBill,
+  RunwayInsight,
+  SocialContact,
+  StatutoryRecord,
+  TimeOfDayInsight,
+  Transaction,
+} from '../types/transaction';
 
 /**
  * Approximate Safaricom M-Pesa Tariff Fee for a given transaction amount.
@@ -161,14 +171,7 @@ export function computeFinancialHealthMetrics(transactions: Transaction[]): Fina
   // ==========================================
   // 1. PER-MONTH ANALYTICS
   // ==========================================
-  const monthMap: Record<
-    string,
-    {
-      inTotal: number;
-      outTotal: number;
-      txs: Transaction[];
-    }
-  > = {};
+  const monthMap: Record<string, { inTotal: number; outTotal: number; txs: Transaction[] }> = {};
 
   for (const t of transactions) {
     const y = t.dateTime.getFullYear();
@@ -229,7 +232,6 @@ export function computeFinancialHealthMetrics(transactions: Transaction[]): Fina
     }
   > = {};
 
-  // Track day of week totals (0 = Sunday, 1 = Monday, ...)
   const dayOfWeekTotals: { totalSpent: number; count: number }[] = Array(7)
     .fill(0)
     .map(() => ({ totalSpent: 0, count: 0 }));
@@ -261,7 +263,6 @@ export function computeFinancialHealthMetrics(transactions: Transaction[]): Fina
   let maxNetGain = -Infinity;
 
   for (const [dateStr, dayData] of Object.entries(dailyMap)) {
-    // Worst Day Check
     if (dayData.outAmount > maxSpent) {
       maxSpent = dayData.outAmount;
       const biggestTx = [...dayData.spends].sort((a, b) => b.amount - a.amount)[0];
@@ -276,7 +277,6 @@ export function computeFinancialHealthMetrics(transactions: Transaction[]): Fina
       };
     }
 
-    // Best Day Check (Highest net savings / income surplus)
     const netDay = dayData.inAmount - dayData.outAmount;
     if (netDay > maxNetGain && dayData.inAmount > 0) {
       maxNetGain = netDay;
@@ -343,7 +343,168 @@ export function computeFinancialHealthMetrics(transactions: Transaction[]): Fina
     dayOfWeekBreakdown,
   };
 
-  // Score Calculation (0-100)
+  // ==========================================
+  // 3. RECURRING BILLS & SUBSCRIPTIONS RADAR
+  // ==========================================
+  const billMap: Record<string, { totalPaid: number; count: number; dates: string[]; category: string }> = {};
+  for (const t of spends) {
+    const lower = (t.details + ' ' + t.counterparty).toLowerCase();
+    const isLikelyRecurring =
+      t.category === 'Paybill' ||
+      t.category === 'Utility / Bills' ||
+      lower.includes('kplc') ||
+      lower.includes('fibre') ||
+      lower.includes('internet') ||
+      lower.includes('water') ||
+      lower.includes('rent') ||
+      lower.includes('netflix') ||
+      lower.includes('spotify') ||
+      lower.includes('dstv') ||
+      lower.includes('insurance');
+
+    if (isLikelyRecurring) {
+      const name = t.counterparty;
+      if (!billMap[name]) {
+        billMap[name] = { totalPaid: 0, count: 0, dates: [], category: t.category };
+      }
+      billMap[name].totalPaid += t.amount;
+      billMap[name].count += 1;
+      billMap[name].dates.push(t.dateTime.toISOString().substring(0, 10));
+    }
+  }
+
+  const recurringBills: RecurringBill[] = Object.entries(billMap)
+    .map(([name, d]) => ({
+      name,
+      category: d.category,
+      averageAmount: d.totalPaid / d.count,
+      totalPaid: d.totalPaid,
+      frequency: d.count,
+      lastPaidDate: d.dates.sort().reverse()[0],
+    }))
+    .sort((a, b) => b.totalPaid - a.totalPaid);
+
+  // ==========================================
+  // 4. P2P RELATIONSHIP & SOCIAL NET MATRIX
+  // ==========================================
+  const contactMap: Record<string, { sent: number; received: number; count: number }> = {};
+  for (const t of transactions) {
+    if (t.category === 'Send Money (P2P)' || t.category === 'Received Money (P2P)') {
+      const name = t.counterparty;
+      if (!name || name === 'P2P Sender' || name === 'P2P Recipient') continue;
+      if (!contactMap[name]) {
+        contactMap[name] = { sent: 0, received: 0, count: 0 };
+      }
+      if (t.type === 'OUT') {
+        contactMap[name].sent += t.amount;
+      } else {
+        contactMap[name].received += t.amount;
+      }
+      contactMap[name].count += 1;
+    }
+  }
+
+  const socialContacts: SocialContact[] = Object.entries(contactMap)
+    .map(([name, d]) => {
+      const netFlow = d.received - d.sent;
+      let relationshipType: 'Beneficiary' | 'Contributor' | 'Reciprocal' = 'Reciprocal';
+      if (netFlow < -500) relationshipType = 'Beneficiary';
+      else if (netFlow > 500) relationshipType = 'Contributor';
+
+      return {
+        name,
+        sentTotal: d.sent,
+        receivedTotal: d.received,
+        netFlow,
+        txCount: d.count,
+        relationshipType,
+      };
+    })
+    .sort((a, b) => b.sentTotal + b.receivedTotal - (a.sentTotal + a.receivedTotal))
+    .slice(0, 15);
+
+  // ==========================================
+  // 5. TIME OF DAY & LATE-NIGHT IMPULSE TAX
+  // ==========================================
+  let morningTotal = 0, morningCount = 0;
+  let workdayTotal = 0, workdayCount = 0;
+  let eveningTotal = 0, eveningCount = 0;
+  let lateNightTotal = 0, lateNightCount = 0;
+
+  for (const t of spends) {
+    const hour = t.dateTime.getHours();
+    if (hour >= 6 && hour < 11) {
+      morningTotal += t.amount;
+      morningCount += 1;
+    } else if (hour >= 11 && hour < 17) {
+      workdayTotal += t.amount;
+      workdayCount += 1;
+    } else if (hour >= 17 && hour < 22) {
+      eveningTotal += t.amount;
+      eveningCount += 1;
+    } else {
+      lateNightTotal += t.amount;
+      lateNightCount += 1;
+    }
+  }
+
+  const timeOfDayInsights: TimeOfDayInsight = {
+    morning: { total: morningTotal, count: morningCount, percentage: totalOut > 0 ? (morningTotal / totalOut) * 100 : 0 },
+    workday: { total: workdayTotal, count: workdayCount, percentage: totalOut > 0 ? (workdayTotal / totalOut) * 100 : 0 },
+    evening: { total: eveningTotal, count: eveningCount, percentage: totalOut > 0 ? (eveningTotal / totalOut) * 100 : 0 },
+    lateNight: { total: lateNightTotal, count: lateNightCount, percentage: totalOut > 0 ? (lateNightTotal / totalOut) * 100 : 0 },
+  };
+
+  // ==========================================
+  // 6. ECITIZEN & STATUTORY TAX FILING RECORDS
+  // ==========================================
+  const statutoryMap: Record<string, { type: any; recipient: string; totalAmount: number; receipts: any[] }> = {};
+  for (const t of spends) {
+    const lower = (t.details + ' ' + t.counterparty).toLowerCase();
+    let type: any = null;
+    if (lower.includes('ecitizen') || lower.includes('222222')) type = 'eCitizen';
+    else if (lower.includes('kra') || lower.includes('572572')) type = 'KRA';
+    else if (lower.includes('nssf')) type = 'NSSF';
+    else if (lower.includes('nhif') || lower.includes('shif')) type = 'SHIF/NHIF';
+
+    if (type) {
+      if (!statutoryMap[type]) {
+        statutoryMap[type] = { type, recipient: t.counterparty, totalAmount: 0, receipts: [] };
+      }
+      statutoryMap[type].totalAmount += t.amount;
+      statutoryMap[type].receipts.push({
+        receiptNo: t.receiptNo,
+        date: t.dateTime.toISOString().substring(0, 10),
+        amount: t.amount,
+        details: t.details,
+      });
+    }
+  }
+  const statutoryRecords: StatutoryRecord[] = Object.values(statutoryMap);
+
+  // ==========================================
+  // 7. EMERGENCY RUNWAY & CASH VELOCITY BUFFER
+  // ==========================================
+  const sortedByTimeDesc = [...transactions].sort((a, b) => b.dateTime.getTime() - a.dateTime.getTime());
+  const closingBalance =
+    sortedByTimeDesc.length > 0 && sortedByTimeDesc[0].balance > 0
+      ? sortedByTimeDesc[0].balance
+      : Math.max(0, totalIn - totalOut);
+  const runwayDays = avgDailySpend > 0 ? Math.round(closingBalance / avgDailySpend) : 999;
+  let status: 'Healthy' | 'Moderate' | 'Critical' = 'Healthy';
+  if (runwayDays < 10) status = 'Critical';
+  else if (runwayDays < 30) status = 'Moderate';
+
+  const runwayInsight: RunwayInsight = {
+    closingBalance,
+    avgDailyBurn: avgDailySpend,
+    runwayDays,
+    status,
+  };
+
+  // ==========================================
+  // SCORE & RECOMMENDATIONS
+  // ==========================================
   let scorePillarSavings = Math.min(30, (savingsRate / 20) * 30);
   const fulizaRatio = totalOut > 0 ? totalFulizaSpent / totalOut : 0;
   let scorePillarDebt = Math.max(0, 25 - fulizaRatio * 100);
@@ -361,10 +522,21 @@ export function computeFinancialHealthMetrics(transactions: Transaction[]): Fina
   else if (score >= 45) grade = 'Fair';
   else grade = 'Needs Attention';
 
-  // Actionable Prescriptive Recommendations
   const recommendations: string[] = [];
 
-  if (worstDay && totalOut > 0 && (worstDay.totalSpent / totalOut) > 0.25) {
+  if (timeOfDayInsights.lateNight.percentage > 15) {
+    recommendations.push(
+      `Late-Night spending (10 PM – 5 AM) accounts for ${timeOfDayInsights.lateNight.percentage.toFixed(1)}% of your expenses (KES ${timeOfDayInsights.lateNight.total.toLocaleString()}). Curbing late-night nightlife and rideshare surges will yield immediate savings.`
+    );
+  }
+
+  if (runwayInsight.status === 'Critical') {
+    recommendations.push(
+      `Your current liquid balance covers approximately ${runwayDays} days of average spending. Prioritize depositing a 1-month living buffer into an MMF or SACCO.`
+    );
+  }
+
+  if (worstDay && totalOut > 0 && worstDay.totalSpent / totalOut > 0.25) {
     recommendations.push(
       `Your single heaviest spend day was ${worstDay.dateFormatted} (KES ${worstDay.totalSpent.toLocaleString()}), representing ${(
         (worstDay.totalSpent / totalOut) *
@@ -432,6 +604,11 @@ export function computeFinancialHealthMetrics(transactions: Transaction[]): Fina
     budgetBreakdown,
     monthlyMetrics,
     dayInsights,
+    recurringBills,
+    socialContacts,
+    timeOfDayInsights,
+    statutoryRecords,
+    runwayInsight,
     recommendations,
   };
 }

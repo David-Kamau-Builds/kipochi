@@ -11,6 +11,7 @@ export type TransactionCategory =
   | 'Fuliza / Loan'
   | 'Utility / Bills'
   | 'M-Pesa Tariff / Fee'
+  | 'Statutory / Tax / eCitizen'
   | 'Reversal'
   | 'Other';
 
@@ -92,6 +93,45 @@ export interface DayInsight {
   }[];
 }
 
+export interface RecurringBill {
+  name: string;
+  category: string;
+  averageAmount: number;
+  totalPaid: number;
+  frequency: number;
+  lastPaidDate: string;
+}
+
+export interface SocialContact {
+  name: string;
+  sentTotal: number;
+  receivedTotal: number;
+  netFlow: number; // received - sent
+  txCount: number;
+  relationshipType: 'Beneficiary' | 'Contributor' | 'Reciprocal';
+}
+
+export interface TimeOfDayInsight {
+  morning: { total: number; count: number; percentage: number }; // 6 AM - 11 AM
+  workday: { total: number; count: number; percentage: number }; // 11 AM - 5 PM
+  evening: { total: number; count: number; percentage: number }; // 5 PM - 10 PM
+  lateNight: { total: number; count: number; percentage: number }; // 10 PM - 5 AM ("Late Night Tax")
+}
+
+export interface StatutoryRecord {
+  type: 'KRA' | 'eCitizen' | 'NSSF' | 'SHIF/NHIF' | 'Government / License';
+  recipient: string;
+  totalAmount: number;
+  receipts: { receiptNo: string; date: string; amount: number; details: string }[];
+}
+
+export interface RunwayInsight {
+  closingBalance: number;
+  avgDailyBurn: number;
+  runwayDays: number;
+  status: 'Healthy' | 'Moderate' | 'Critical';
+}
+
 export interface FinancialHealthMetrics {
   score: number;
   grade: 'Excellent' | 'Good' | 'Fair' | 'Needs Attention';
@@ -122,5 +162,10 @@ export interface FinancialHealthMetrics {
   };
   monthlyMetrics: MonthlyMetric[];
   dayInsights: DayInsight;
+  recurringBills: RecurringBill[];
+  socialContacts: SocialContact[];
+  timeOfDayInsights: TimeOfDayInsight;
+  statutoryRecords: StatutoryRecord[];
+  runwayInsight: RunwayInsight;
   recommendations: string[];
 }

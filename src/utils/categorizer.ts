@@ -83,7 +83,20 @@ export function categorizeTransaction(
   // 7. Paybill Transactions
   if (lower.includes('pay bill') || lower.includes('paybill')) {
     let bucket: BudgetBucket = 'Needs';
-    if (lower.includes('bet') || lower.includes('sportpesa') || lower.includes('betika') || lower.includes('1xbet') || lower.includes('mozzart')) {
+    let category: TransactionCategory = 'Paybill';
+
+    if (
+      lower.includes('ecitizen') ||
+      lower.includes('222222') ||
+      lower.includes('kra') ||
+      lower.includes('572572') ||
+      lower.includes('nssf') ||
+      lower.includes('nhif') ||
+      lower.includes('shif')
+    ) {
+      category = 'Statutory / Tax / eCitizen';
+      bucket = 'Needs';
+    } else if (lower.includes('bet') || lower.includes('sportpesa') || lower.includes('betika') || lower.includes('1xbet') || lower.includes('mozzart')) {
       bucket = 'Wants';
     } else if (lower.includes('bank') || lower.includes('sacco') || lower.includes('equity') || lower.includes('kcb') || lower.includes('co-op') || lower.includes('stanbic') || lower.includes('cic')) {
       bucket = 'Savings / Debt';
@@ -100,7 +113,7 @@ export function categorizeTransaction(
     }
 
     return {
-      category: 'Paybill',
+      category,
       budgetBucket: bucket,
       counterparty,
     };

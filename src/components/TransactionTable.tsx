@@ -135,6 +135,8 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({ transactions
         return 'green';
       case 'M-Pesa Tariff / Fee':
         return 'yellow';
+      case 'Statutory / Tax / eCitizen':
+        return 'teal';
       default:
         return 'gray';
     }
