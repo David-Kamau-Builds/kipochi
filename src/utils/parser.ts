@@ -1,6 +1,6 @@
 import * as pdfjsLib from 'pdfjs-dist';
-import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.js?url';
-import * as XLSX from 'xlsx';
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import ExcelJS from 'exceljs';
 import Papa from 'papaparse';
 import { StatementMetadata, Transaction, TransactionType } from '../types/transaction';
 import { categorizeTransaction } from './categorizer';
@@ -269,14 +269,9 @@ export async function parseMpesaPdf(fileBuffer: ArrayBuffer, password?: string):
 }
 
 /**
- * Parse an Excel (.xlsx / .xls) statement
+ * Parse extracted rows from an Excel or CSV statement
  */
-export async function parseMpesaExcel(fileBuffer: ArrayBuffer): Promise<ParseResult> {
-  const workbook = XLSX.read(fileBuffer, { type: 'array' });
-  const sheetName = workbook.SheetNames[0];
-  const sheet = workbook.Sheets[sheetName];
-  const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-
+function parseRows(rows: any[][]): ParseResult {
   const metadata: StatementMetadata = {};
   const transactions: Transaction[] = [];
 
@@ -297,7 +292,7 @@ export async function parseMpesaExcel(fileBuffer: ArrayBuffer): Promise<ParseRes
     headerRowIndex = 0;
   }
 
-  const headers = rows[headerRowIndex].map((h) => String(h).trim().toLowerCase());
+  const headers = (rows[headerRowIndex] || []).map((h) => String(h ?? '').trim().toLowerCase());
   const receiptIdx = headers.findIndex((h) => h.includes('receipt'));
   const timeIdx = headers.findIndex((h) => h.includes('time') || h.includes('date'));
   const detailsIdx = headers.findIndex((h) => h.includes('detail'));
@@ -353,11 +348,34 @@ export async function parseMpesaExcel(fileBuffer: ArrayBuffer): Promise<ParseRes
 }
 
 /**
+ * Parse an Excel (.xlsx / .xls) statement
+ */
+export async function parseMpesaExcel(fileBuffer: ArrayBuffer): Promise<ParseResult> {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(fileBuffer);
+  const worksheet = workbook.worksheets[0];
+  const rows: any[][] = [];
+  if (worksheet) {
+    worksheet.eachRow({ includeEmpty: false }, (row) => {
+      const rowValues = Array.isArray(row.values) ? row.values.slice(1) : [];
+      const cleanValues = rowValues.map((v) => {
+        if (v && typeof v === 'object') {
+          if ('result' in v && (v as any).result !== undefined) return (v as any).result;
+          if ('text' in v && (v as any).text !== undefined) return (v as any).text;
+        }
+        return v;
+      });
+      rows.push(cleanValues);
+    });
+  }
+  return parseRows(rows);
+}
+
+/**
  * Parse a CSV statement
  */
 export async function parseMpesaCsv(fileText: string): Promise<ParseResult> {
   const parsed = Papa.parse(fileText, { skipEmptyLines: true });
-  const rows = parsed.data as any[][];
-  const arrayBuffer = new TextEncoder().encode(fileText).buffer;
-  return parseMpesaExcel(arrayBuffer);
+  const rows = (parsed.data as any[][]) || [];
+  return parseRows(rows);
 }
