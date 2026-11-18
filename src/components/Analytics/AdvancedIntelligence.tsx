@@ -25,7 +25,7 @@ import {
   IconDownload,
   IconSparkles,
 } from '@tabler/icons-react';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import {
   RecurringBill,
   RunwayInsight,
@@ -75,24 +75,39 @@ export const AdvancedIntelligence: React.FC<AdvancedIntelligenceProps> = ({
   const totalCommittedBills = recurringBills.reduce((sum, b) => sum + b.averageAmount, 0);
 
   // Export Statutory receipts
-  const handleExportStatutory = () => {
-    const flatRows: any[] = [];
+  const handleExportStatutory = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Statutory-Taxes');
+    worksheet.columns = [
+      { header: 'Authority / Type', key: 'type', width: 22 },
+      { header: 'Recipient / Paybill', key: 'recipient', width: 28 },
+      { header: 'Receipt No', key: 'receiptNo', width: 16 },
+      { header: 'Date', key: 'date', width: 22 },
+      { header: 'Amount (KES)', key: 'amount', width: 16 },
+      { header: 'Full Details', key: 'details', width: 45 },
+    ];
+
     for (const rec of statutoryRecords) {
       for (const r of rec.receipts) {
-        flatRows.push({
-          'Authority / Type': rec.type,
-          'Recipient / Paybill': rec.recipient,
-          'Receipt No': r.receiptNo,
-          'Date': r.date,
-          'Amount (KES)': r.amount,
-          'Full Details': r.details,
+        worksheet.addRow({
+          type: rec.type,
+          recipient: rec.recipient,
+          receiptNo: r.receiptNo,
+          date: r.date,
+          amount: r.amount,
+          details: r.details,
         });
       }
     }
-    const ws = XLSX.utils.json_to_sheet(flatRows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Statutory-Taxes');
-    XLSX.writeFile(wb, 'Kipochi-Tax-Statutory-Audit.xlsx');
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'Kipochi-Tax-Statutory-Audit.xlsx';
+    anchor.click();
+    window.URL.revokeObjectURL(url);
   };
 
   return (

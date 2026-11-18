@@ -25,7 +25,7 @@ import {
   IconCheck,
   IconFilter,
 } from '@tabler/icons-react';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { Transaction, TransactionCategory } from '../types/transaction';
 
 interface TransactionTableProps {
@@ -143,23 +143,43 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({ transactions
   };
 
   // Export to Excel
-  const handleExport = () => {
-    const exportRows = filteredTransactions.map((t) => ({
-      'Receipt No': t.receiptNo,
-      'Date & Time': t.dateTime.toISOString().replace('T', ' ').substring(0, 19),
-      'Type': t.type,
-      'Category': t.category,
-      'Counterparty / Recipient': t.counterparty,
-      'Full Details': t.details,
-      'Amount (KES)': t.amount,
-      'Balance (KES)': t.balance,
-      'Budget Bucket': t.budgetBucket,
-    }));
+  const handleExport = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet(`${type}-Transactions`);
+    worksheet.columns = [
+      { header: 'Receipt No', key: 'receiptNo', width: 16 },
+      { header: 'Date & Time', key: 'dateTime', width: 22 },
+      { header: 'Type', key: 'type', width: 10 },
+      { header: 'Category', key: 'category', width: 22 },
+      { header: 'Counterparty / Recipient', key: 'counterparty', width: 26 },
+      { header: 'Full Details', key: 'details', width: 45 },
+      { header: 'Amount (KES)', key: 'amount', width: 16 },
+      { header: 'Balance (KES)', key: 'balance', width: 16 },
+      { header: 'Budget Bucket', key: 'budgetBucket', width: 16 },
+    ];
 
-    const worksheet = XLSX.utils.json_to_sheet(exportRows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, `${type}-Transactions`);
-    XLSX.writeFile(workbook, `M-Pesa-${type}-Transactions.xlsx`);
+    filteredTransactions.forEach((t) => {
+      worksheet.addRow({
+        receiptNo: t.receiptNo,
+        dateTime: t.dateTime.toISOString().replace('T', ' ').substring(0, 19),
+        type: t.type,
+        category: t.category,
+        counterparty: t.counterparty,
+        details: t.details,
+        amount: t.amount,
+        balance: t.balance,
+        budgetBucket: t.budgetBucket,
+      });
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `M-Pesa-${type}-Transactions.xlsx`;
+    anchor.click();
+    window.URL.revokeObjectURL(url);
   };
 
   return (
